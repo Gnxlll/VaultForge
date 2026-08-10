@@ -1,4 +1,3 @@
-import React from "react";
 import { Settings, Shield, Monitor } from "lucide-react";
 
 export default function SettingsTab() {

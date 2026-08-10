@@ -38,7 +38,8 @@ fn main() {
                 commands::project_ops::delete_project,
             commands::file_ops::encrypt_file,
             commands::file_ops::get_secure_files,
-            commands::file_ops::decrypt_file
+            commands::file_ops::decrypt_file,
+            commands::file_ops::decrypt_file_preview
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

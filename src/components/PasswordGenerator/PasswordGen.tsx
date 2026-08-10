@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Key, Copy, RefreshCw, CheckCircle2, Shield } from "lucide-react";
 import { safeInvoke } from "../../utils/tauri";
 

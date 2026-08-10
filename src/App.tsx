@@ -9,12 +9,10 @@ import {
   FileLock2,
   Settings,
 } from "lucide-react";
-import FolderList from "./components/FolderManager/FolderList";
 import SecretGen from "./components/SecretGenerator/SecretGen";
 import PasswordGen from "./components/PasswordGenerator/PasswordGen";
 import VaultList from "./components/Vault/VaultList";
 import SecureFiles from "./components/Vault/SecureFiles";
-import ProjectForm from "./components/ProjectManager/ProjectForm";
 import ProjectList from "./components/ProjectManager/ProjectList";
 import Dashboard from "./components/UI/Dashboard";
 import SettingsTab from "./components/UI/SettingsTab";

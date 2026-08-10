@@ -16,6 +16,9 @@ interface SecureFile {
   file_size: number;
   hint: string;
   created_at: string;
+  mime_type?: string | null;
+  encrypted_file_path?: string;
+  modified_at?: string | null; // seconds since epoch
 }
 
 export default function SecureFiles() {
@@ -32,6 +35,11 @@ export default function SecureFiles() {
   // Decrypt State
   const [unlockingFile, setUnlockingFile] = useState<SecureFile | null>(null);
   const [unlockPasscode, setUnlockPasscode] = useState("");
+  const [previewData, setPreviewData] = useState<{
+    mime: string;
+    base64: string;
+    filename: string;
+  } | null>(null);
 
   const fetchFiles = async () => {
     try {
@@ -97,10 +105,36 @@ export default function SecureFiles() {
     e.preventDefault();
     if (!unlockingFile || !unlockPasscode) return;
 
-    let exportPath: string | null;
-
+    setIsProcessing(true);
     try {
-      // Ask where to save the decrypted file
+      const res = await safeInvoke<{
+        original_filename: string;
+        mime: string;
+        base64: string;
+      }>("decrypt_file_preview", {
+        id: unlockingFile.id,
+        passcode: unlockPasscode,
+      });
+
+      setPreviewData({
+        mime: res.mime,
+        base64: res.base64,
+        filename: res.original_filename,
+      });
+      setError(null);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setIsProcessing(false);
+      // keep unlockingFile open so user can export after preview
+    }
+  };
+
+  const handleExportFromPreview = async () => {
+    if (!unlockingFile) return;
+
+    let exportPath: string | null;
+    try {
       exportPath = await safeSave({
         defaultPath: unlockingFile.original_filename,
         title: "Export Decrypted File",
@@ -109,22 +143,18 @@ export default function SecureFiles() {
       setError(String(err));
       return;
     }
-
-    if (!exportPath) return; // User cancelled
+    if (!exportPath) return;
 
     setIsProcessing(true);
     try {
       await safeInvoke("decrypt_file", {
         id: unlockingFile.id,
-        passcode: unlockPasscode,
+        passcode: unlockPasscode || "",
         exportPath,
       });
-
+      setPreviewData(null);
       setUnlockingFile(null);
-      setUnlockPasscode("");
       setError(null);
-
-      // Temporary success state would go here
       alert("File decrypted and exported successfully!");
     } catch (err) {
       setError(String(err));
@@ -267,23 +297,140 @@ export default function SecureFiles() {
               </p>
             </div>
 
-            <input
-              type="password"
-              required
-              autoFocus
-              value={unlockPasscode}
-              onChange={(e) => setUnlockPasscode(e.target.value)}
-              className="w-full bg-cyber-dark border border-cyber-neonYellow text-white p-3 font-mono text-center text-xl tracking-[0.3em] focus:border-white outline-none mb-4"
-              placeholder="••••••••"
-            />
+            {!previewData ? (
+              <>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  value={unlockPasscode}
+                  onChange={(e) => setUnlockPasscode(e.target.value)}
+                  className="w-full bg-cyber-dark border border-cyber-neonYellow text-white p-3 font-mono text-center text-xl tracking-[0.3em] focus:border-white outline-none mb-4"
+                  placeholder="••••••••"
+                />
 
-            <button
-              type="submit"
-              disabled={isProcessing}
-              className="w-full bg-cyber-neonYellow text-black p-3 font-bold font-heading uppercase tracking-widest hover:bg-white transition-colors disabled:opacity-50"
-            >
-              {isProcessing ? "DECRYPTING..." : "UNLOCK & EXPORT"}
-            </button>
+                <button
+                  type="submit"
+                  disabled={isProcessing}
+                  className="w-full bg-cyber-neonYellow text-black p-3 font-bold font-heading uppercase tracking-widest hover:bg-white transition-colors disabled:opacity-50"
+                >
+                  {isProcessing ? "DECRYPTING..." : "UNLOCK & PREVIEW"}
+                </button>
+              </>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 bg-black/40 p-4 rounded max-h-[70vh] overflow-auto">
+                  <div className="text-xs text-gray-400 mb-2">
+                    Preview: {previewData.filename}
+                  </div>
+                  {previewData.mime.startsWith("image/") ? (
+                    <img
+                      src={`data:${previewData.mime};base64,${previewData.base64}`}
+                      alt={previewData.filename}
+                      className="max-h-[60vh] mx-auto"
+                    />
+                  ) : previewData.mime === "text/plain" ? (
+                    <pre className="bg-black/50 p-3 rounded text-sm overflow-auto max-h-[60vh]">
+                      {atob(previewData.base64)}
+                    </pre>
+                  ) : previewData.mime === "application/pdf" ? (
+                    <object
+                      data={`data:application/pdf;base64,${previewData.base64}`}
+                      type="application/pdf"
+                      className="w-full h-[60vh]"
+                    >
+                      <div className="p-6 border border-gray-700 text-sm text-gray-300">
+                        PDF preview not available. Use Export to save the
+                        decrypted file.
+                      </div>
+                    </object>
+                  ) : (
+                    <div className="p-6 border border-gray-700 text-sm text-gray-300">
+                      No inline preview available for this file type (
+                      {previewData.mime}). Use Export to save the decrypted
+                      file.
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-1 bg-cyber-panel p-4 border border-cyber-neonYellow rounded text-sm space-y-3">
+                  <div>
+                    <div className="text-xs text-gray-400">File name</div>
+                    <div className="text-white font-mono truncate">
+                      {previewData.filename}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">File size</div>
+                    <div className="text-white">
+                      {unlockingFile
+                        ? formatBytes(unlockingFile.file_size)
+                        : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">File type</div>
+                    <div className="text-white">
+                      {previewData.mime ||
+                        (unlockingFile?.mime_type ?? "Unknown")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">File location</div>
+                    <div className="text-white font-mono break-all text-xs">
+                      {unlockingFile?.encrypted_file_path ?? "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Date created</div>
+                    <div className="text-white">
+                      {unlockingFile?.created_at ?? "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Date modified</div>
+                    <div className="text-white">
+                      {unlockingFile?.modified_at
+                        ? new Date(
+                            Number(unlockingFile.modified_at) * 1000,
+                          ).toLocaleString()
+                        : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Encryption</div>
+                    <div className="text-white">AES-256-GCM</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Hint</div>
+                    <div className="text-white font-mono">
+                      {unlockingFile?.hint ?? "—"}
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-2 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewData(null);
+                        setUnlockingFile(null);
+                        setError(null);
+                      }}
+                      className="flex-1 bg-gray-800 p-2 text-sm"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportFromPreview}
+                      className="flex-1 bg-cyber-neonYellow text-black p-2 font-bold"
+                    >
+                      {isProcessing ? "EXPORTING..." : "Export"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
         </div>
       )}

@@ -1,4 +1,3 @@
-import React from "react";
 import { FolderOpen, KeyRound, Lock, FileText } from "lucide-react";
 
 export default function Dashboard() {

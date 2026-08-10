@@ -1,8 +1,7 @@
-import React from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import ProjectList from "../components/ProjectManager/ProjectList";
 import * as tauri from "../utils/tauri";
-import { vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 describe("ProjectList delete flow", () => {
   it("loads projects and deletes one after confirmation", async () => {

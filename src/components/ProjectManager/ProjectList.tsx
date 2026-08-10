@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { safeInvoke } from "../../utils/tauri";
 import ProjectForm from "./ProjectForm";
 import ConfirmModal from "../UI/ConfirmModal";
@@ -87,6 +87,24 @@ export default function ProjectList() {
                     className="text-blue-400 text-sm"
                   >
                     Edit
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        // use stored IDE binary if available, otherwise default to 'code'
+                        const ideBin =
+                          p.ide && p.ide.length > 0 ? p.ide : "code";
+                        await safeInvoke("open_folder_in_ide", {
+                          path: p.path,
+                          ide_bin: ideBin,
+                        });
+                      } catch (err) {
+                        console.error("Failed to open project in IDE", err);
+                      }
+                    }}
+                    className="text-green-400 text-sm"
+                  >
+                    Open
                   </button>
                   <button
                     onClick={() => {
