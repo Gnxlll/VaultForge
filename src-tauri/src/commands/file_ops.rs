@@ -491,8 +491,13 @@ pub fn decrypt_file_preview(
         }
 
         Some(ext)
-            if ["txt", "md", "json", "csv", "log", "xml", "html", "htm"]
-                .contains(&ext.as_str()) =>
+            if [
+                "txt", "md", "json", "csv", "log", "xml", "html", "htm", "js",
+                "ts", "tsx", "jsx", "py", "rs", "go", "java", "c", "cpp", "h",
+                "css", "scss", "yml", "yaml", "toml", "ini", "env", "sh", "bat",
+                "ps1", "sql",
+            ]
+            .contains(&ext.as_str()) =>
         {
             "text/plain".to_string()
         }
@@ -514,4 +519,78 @@ pub fn decrypt_file_preview(
         mime,
         base64: b64,
     })
+}
+
+#[tauri::command]
+pub fn delete_secure_file(
+    state: State<'_, DbState>,
+    id: String,
+    passcode: String,
+) -> Result<(), String> {
+    validate_id(&id)?;
+    validate_passcode(&passcode)?;
+
+    let db_guard = state
+        .db
+        .lock()
+        .map_err(|_| "DATABASE_LOCK_ERROR".to_string())?;
+
+    let conn = db_guard.as_ref().ok_or("DATABASE_ERROR".to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT
+                encrypted_file_path,
+                salt,
+                nonce,
+                vault_item_id
+             FROM secure_files
+             WHERE id = ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let (encrypted_path, salt, nonce_bytes, vault_item_id): (
+        String,
+        Vec<u8>,
+        Vec<u8>,
+        String,
+    ) = stmt
+        .query_row(params![id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .map_err(|_| "FILE_RECORD_NOT_FOUND".to_string())?;
+
+    if salt.len() != 32 {
+        return Err("INVALID_SALT".to_string());
+    }
+    if nonce_bytes.len() != 12 {
+        return Err("INVALID_NONCE".to_string());
+    }
+
+    // Verify passcode by attempting decrypt
+    let ciphertext = fs::read(&encrypted_path)
+        .map_err(|_| "FAILED_TO_READ_ENCRYPTED_FILE".to_string())?;
+
+    let mut key = derive_key(&passcode, &salt)?;
+    let cipher = Aes256Gcm::new((&key).into());
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    cipher
+        .decrypt(nonce, ciphertext.as_ref())
+        .map_err(|_| {
+            "DECRYPTION_FAILED: Invalid passcode or corrupt data".to_string()
+        })?;
+    key.zeroize();
+
+    // Remove encrypted blob and DB rows
+    let _ = fs::remove_file(&encrypted_path);
+
+    conn.execute("DELETE FROM secure_files WHERE id = ?1", params![id])
+        .map_err(|e| format!("DATABASE_ERROR: {}", e))?;
+
+    let _ = conn.execute(
+        "DELETE FROM vault_items WHERE id = ?1",
+        params![vault_item_id],
+    );
+
+    Ok(())
 }

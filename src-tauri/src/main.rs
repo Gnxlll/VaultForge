@@ -33,13 +33,15 @@ fn main() {
             commands::vault_ops::get_vault_items,
             commands::vault_ops::update_vault_item,
             commands::vault_ops::unlock_vault_item,
+            commands::vault_ops::delete_vault_item,
             commands::project_ops::save_project,
             commands::project_ops::get_projects,
                 commands::project_ops::delete_project,
             commands::file_ops::encrypt_file,
             commands::file_ops::get_secure_files,
             commands::file_ops::decrypt_file,
-            commands::file_ops::decrypt_file_preview
+            commands::file_ops::decrypt_file_preview,
+            commands::file_ops::delete_secure_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

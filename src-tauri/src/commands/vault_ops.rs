@@ -121,3 +121,32 @@ pub fn update_vault_item(
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn delete_vault_item(
+    state: State<'_, DbState>,
+    id: String,
+    passcode: String,
+) -> Result<(), String> {
+    validate_id(&id)?;
+    validate_passcode(&passcode)?;
+
+    let db_guard = state.db.lock().unwrap();
+    let conn = db_guard.as_ref().ok_or("DATABASE_ERROR")?;
+
+    // Verify passcode by decrypting before delete
+    let mut stmt = conn
+        .prepare("SELECT encrypted_data FROM vault_items WHERE id = ?1")
+        .map_err(|e| e.to_string())?;
+
+    let encrypted_data: Vec<u8> = stmt
+        .query_row(params![id], |row| row.get(0))
+        .map_err(|_| "ITEM_NOT_FOUND".to_string())?;
+
+    decrypt_vault_payload(&passcode, &encrypted_data)?;
+
+    conn.execute("DELETE FROM vault_items WHERE id = ?1", params![id])
+        .map_err(|e| format!("DATABASE_ERROR: {}", e))?;
+
+    Ok(())
+}
